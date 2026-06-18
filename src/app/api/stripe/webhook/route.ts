@@ -19,45 +19,38 @@ export async function POST(req: NextRequest) {
   try {
     event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
   } catch (err: any) {
-    return NextResponse.json(
-      { error: `Webhook signature verification failed: ${err.message}` },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: `Webhook signature verification failed: ${err.message}` }, { status: 400 });
   }
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const userId = session.metadata?.userId;
+    const priceId = session.line_items?.data[0]?.price?.id;
 
     if (userId) {
-      await supabaseAdmin
-        .from("profiles")
-        .update({
-          plan: "pro",
-          stripe_subscription_id: session.subscription as string,
-          credits: 999999,
-        })
-        .eq("id", userId);
+      // Determine plan based on price ID
+      let plan = "pro";
+      let credits = 999999;
+
+      if (priceId === process.env.STRIPE_PRICE_ID_STARTER) {
+        plan = "starter";
+        credits = 20;
+      }
+
+      await supabaseAdmin.from("profiles").update({
+        plan,
+        stripe_subscription_id: session.subscription as string,
+        credits,
+      }).eq("id", userId);
     }
   }
 
   if (event.type === "customer.subscription.deleted") {
     const subscription = event.data.object as Stripe.Subscription;
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("id")
-      .eq("stripe_subscription_id", subscription.id)
-      .single();
+    const { data: profile } = await supabaseAdmin.from("profiles").select("id").eq("stripe_subscription_id", subscription.id).single();
 
     if (profile) {
-      await supabaseAdmin
-        .from("profiles")
-        .update({
-          plan: "free",
-          credits: 3,
-          stripe_subscription_id: null,
-        })
-        .eq("id", profile.id);
+      await supabaseAdmin.from("profiles").update({ plan: "free", credits: 5, stripe_subscription_id: null }).eq("id", profile.id);
     }
   }
 

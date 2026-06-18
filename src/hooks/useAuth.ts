@@ -60,10 +60,57 @@ export function useAuth() {
       await supabase.from("profiles").insert({
         id: data.user.id,
         email: data.user.email,
-        credits: 3,
+        credits: 5,
         plan: "free",
       });
     }
+    return { error };
+  };
+
+  const signInWithPhone = async (phone: string) => {
+    const { error, data } = await supabase.auth.signInWithOtp({
+      phone,
+    });
+    return { error, data };
+  };
+
+  const verifyPhoneOTP = async (phone: string, token: string) => {
+    const { error, data } = await supabase.auth.verifyOtp({
+      phone,
+      token,
+      type: "sms",
+    });
+    if (!error && data.user) {
+      // Check if profile exists, create if not
+      const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", data.user.id)
+        .single();
+
+      if (!existing) {
+        await supabase.from("profiles").insert({
+          id: data.user.id,
+          email: data.user.email || phone,
+          credits: 5,
+          plan: "free",
+        });
+      }
+    }
+    return { error, data };
+  };
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login?reset=true`,
+    });
+    return { error };
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
     return { error };
   };
 
@@ -85,5 +132,16 @@ export function useAuth() {
     return false;
   };
 
-  return { user, loading, signIn, signUp, signOut, useCredit };
+  return { 
+    user, 
+    loading, 
+    signIn, 
+    signUp, 
+    signInWithPhone, 
+    verifyPhoneOTP,
+    resetPassword,
+    updatePassword,
+    signOut, 
+    useCredit 
+  };
 }
